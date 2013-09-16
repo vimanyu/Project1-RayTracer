@@ -44,9 +44,23 @@ __host__ __device__ glm::vec3 generateRandomNumberFromThread(glm::vec2 resolutio
 //TODO: IMPLEMENT THIS FUNCTION
 //Function that does the initial raycast from the camera
 __host__ __device__ ray raycastFromCameraKernel(glm::vec2 resolution, float time, int x, int y, glm::vec3 eye, glm::vec3 view, glm::vec3 up, glm::vec2 fov){
+  
   ray r;
-  r.origin = glm::vec3(0,0,0);
-  r.direction = glm::vec3(0,0,-1);
+  float theta = fov.x*PI/180.0f;
+  float phi = fov.y*PI/180.0f;
+
+  glm::vec3 A = glm::cross(view,up);
+  glm::vec3 B = glm::cross(A,view);
+  glm::vec3 M = eye + view;
+  glm::vec3 H = glm::normalize(A)*glm::length(view)*tan(theta);
+  glm::vec3 V = glm::normalize(B)*glm::length(view)*tan(phi);
+
+  float sx = (float)x/(resolution.x-1);
+  float sy = 1.0 - (float)y/(resolution.y-1);
+
+  glm::vec3 P = M + (2*sx-1)*H + (2*sy - 1)*V;
+  r.origin = eye;
+  r.direction = glm::normalize(P-eye);
   return r;
 }
 
@@ -68,7 +82,6 @@ __global__ void sendImageToPBO(uchar4* PBOpos, glm::vec2 resolution, glm::vec3* 
   int index = x + (y * resolution.x);
   
   if(x<=resolution.x && y<=resolution.y){
-
       glm::vec3 color;
       color.x = image[index].x*255.0;
       color.y = image[index].y*255.0;
@@ -94,20 +107,217 @@ __global__ void sendImageToPBO(uchar4* PBOpos, glm::vec2 resolution, glm::vec3* 
   }
 }
 
+
+__host__ __device__ int findNearestGeometricIntersection(ray& r, glm::vec3& intersectionPoint,
+														   glm::vec3& intersectionNormal,
+														   staticGeom* geoms, int numberOfGeoms)
+{
+	int nearestIntersectionObject = -1;
+	float nearestIntersectionDist = FLT_MAX;
+	for(int i=0; i<numberOfGeoms;++i)
+	{
+		if(geoms[i].type == SPHERE)
+		{
+			glm::vec3 iPoint;
+			glm::vec3 iNormal;		
+			float t = sphereIntersectionTest(geoms[i],r,iPoint,iNormal);
+			if (t!= -1 && t<nearestIntersectionDist)
+			{
+				nearestIntersectionObject = i;
+				nearestIntersectionDist = t;
+				intersectionPoint = iPoint;
+				intersectionNormal = iNormal;
+			}
+		}
+
+		if(geoms[i].type == CUBE)
+		{
+			glm::vec3 iPoint;
+			glm::vec3 iNormal;		
+			float t = boxIntersectionTest(geoms[i],r,iPoint,iNormal);
+			if (t!= -1 && t<nearestIntersectionDist)
+			{
+				nearestIntersectionObject = i;
+				nearestIntersectionDist = t;
+				intersectionPoint = iPoint;
+				intersectionNormal = iNormal;
+			}
+		}		
+	}
+
+	return nearestIntersectionObject;
+
+
+}
+
+__host__ __device__ glm::vec3 shade(material& mtl, glm::vec3& shadePoint, glm::vec3& shadeNormal,
+									glm::vec3 eye,staticGeom* geoms,int numberOfGeoms)
+{
+	glm::vec3 lightPos( 0,10,20);
+	glm::vec3 lightCol(1,1,1);
+	int numberOfLights = 1;
+	float Kd = 0.6;
+	float Ks = 0.2;
+	glm::vec3 color(0,0,0);
+	
+	for (int i=0;i<numberOfLights;++i)
+	{
+		ray shadowFeeler;
+		shadowFeeler.direction = lightPos - shadePoint;
+		shadowFeeler.origin = shadePoint+ (float)RAY_BIAS_AMOUNT*shadowFeeler.direction;
+		
+		glm::vec3 intersectionPoint,intersectionNormal;
+		int intersectionObjIndex = findNearestGeometricIntersection(shadowFeeler,intersectionPoint,
+																	intersectionNormal,
+																	geoms,numberOfGeoms);
+
+		if (intersectionObjIndex != -1)
+			continue;
+
+
+		float LN = glm::dot(shadowFeeler.direction,shadeNormal);
+		LN = utilityCore::clamp(LN,0,1);
+		glm::vec3 Rj = glm::normalize(glm::reflect(-shadowFeeler.direction,shadeNormal));
+		glm::vec3 V = glm::normalize(eye-shadePoint);
+		float RjV = glm::dot(Rj,V);
+		RjV = utilityCore::clamp(RjV,0,1);
+
+		color+= (Kd*mtl.color*LN + Ks*mtl.specularColor*(powf(RjV,mtl.specularExponent)));
+	}
+
+	return color;
+}
+
+
+
 //TODO: IMPLEMENT THIS FUNCTION
 //Core raytracer kernel
 __global__ void raytraceRay(glm::vec2 resolution, float time, cameraData cam, int rayDepth, glm::vec3* colors,
-                            staticGeom* geoms, int numberOfGeoms){
+                            staticGeom* geoms, int numberOfGeoms, material* mtls, int numberOfMaterials){
 
   int x = (blockIdx.x * blockDim.x) + threadIdx.x;
   int y = (blockIdx.y * blockDim.y) + threadIdx.y;
   int index = x + (y * resolution.x);
 
   if((x<=resolution.x && y<=resolution.y)){
+	ray r = raycastFromCameraKernel(resolution,time,x,y,cam.position,cam.view,cam.up,cam.fov);
 
-    colors[index] = generateRandomNumberFromThread(resolution, time, x, y);
+	colors[index] = glm::vec3(1,0,0);
+
+	glm::vec3 intersectionPoint;
+	glm::vec3 intersectionNormal;
+	int nearestIntersectionObject = -1;
+	float nearestIntersectionDist = FLT_MAX;
+	for(int i=0; i<numberOfGeoms;++i)
+	{
+		if(geoms[i].type == SPHERE)
+		{
+			glm::vec3 iPoint;
+			glm::vec3 iNormal;		
+			float t = sphereIntersectionTest(geoms[i],r,iPoint,iNormal);
+			if (t!= -1 && t<nearestIntersectionDist)
+			{
+				nearestIntersectionObject = i;
+				nearestIntersectionDist = t;
+				intersectionPoint = iPoint;
+				intersectionNormal = iNormal;
+			}
+		}
+
+		else if(geoms[i].type == CUBE)
+		{
+			glm::vec3 iPoint;
+			glm::vec3 iNormal;		
+			float t = boxIntersectionTest(geoms[i],r,iPoint,iNormal);
+			if (t!= -1 && t<nearestIntersectionDist)
+			{
+				nearestIntersectionObject = i;
+				nearestIntersectionDist = t;
+				intersectionPoint = iPoint;
+				intersectionNormal = iNormal;
+			}
+		}		
+	}
+
+	material mtl = mtls[geoms[nearestIntersectionObject].materialid];
+	glm::vec3 lightPos( 0,10,5);
+	glm::vec3 lightCol(1,1,1);
+	int numberOfLights = 1;
+	float Kd = 0.6;
+	float Ks = 0.2;
+	glm::vec3 color(0,0,0);
+	
+	for (int i=0;i<numberOfLights;++i)
+	{
+		ray shadowFeeler;
+		shadowFeeler.direction = lightPos - intersectionPoint;
+		shadowFeeler.origin = intersectionPoint+ (float)RAY_BIAS_AMOUNT*shadowFeeler.direction;
+		bool occluded = false;
+		for(int i=0; i<numberOfGeoms;++i)
+		{
+			if(geoms[i].type == SPHERE)
+			{
+				glm::vec3 iPoint;
+				glm::vec3 iNormal;		
+				float t = sphereIntersectionTest(geoms[i],shadowFeeler,iPoint,iNormal);
+				if (t!= -1)
+				{
+					occluded = true;
+					break;
+				}
+			}
+
+			if(geoms[i].type == CUBE)
+			{
+				glm::vec3 iPoint;
+				glm::vec3 iNormal;		
+				float t = boxIntersectionTest(geoms[i],shadowFeeler,iPoint,iNormal);
+				if (t!= -1)
+				{
+					occluded = true;
+					break;
+				}
+			}		
+		}
+
+		//if(occluded)
+		//	continue;
+
+		float LN = glm::dot(shadowFeeler.direction,intersectionNormal);
+		LN = max(LN,0.0f);
+		LN = min(LN,1.0f);
+		//glm::vec3 Rj = glm::normalize(glm::reflect(-shadowFeeler.direction,intersectionNormal));
+		//glm::vec3 V = glm::normalize(cam.position-intersectionPoint);
+		//float RjV = glm::dot(Rj,V);
+		//RjV = max(RjV,0.0f);
+		//RjV = min(RjV,1.0f);
+
+		//color+= Kd*mtl.color*LN;
+		color+= glm::vec3( fabs(intersectionNormal.x),fabs(intersectionNormal.y),fabs(intersectionNormal.z));
+		//color+= (Kd*mtl.color*LN + Ks*mtl.specularColor*(powf(RjV,mtl.specularExponent)));
+	}
+	
+	colors[index] = color;
+
+
+	//glm::vec3 shadePoint;
+	//glm::vec3 shadeNormal;
+
+	//int intersectionGeomIndex = findNearestGeometricIntersection(r,shadePoint,shadeNormal,geoms,numberOfGeoms);
+	//
+	//if (intersectionGeomIndex == -1)
+	//{
+	//	colors[index] = glm::vec3(0,0,0);
+	//	return;
+	//}
+
+	//colors[index] = shade(mtls[geoms[intersectionGeomIndex].materialid], shadePoint, shadeNormal,cam.position,geoms,numberOfGeoms);
+
+    //colors[index] = generateRandomNumberFromThread(resolution, time, x, y);
    }
 }
+
+
 
 //TODO: FINISH THIS FUNCTION
 // Wrapper for the __global__ call that sets up the kernel calls and does a ton of memory management
@@ -143,6 +353,11 @@ void cudaRaytraceCore(uchar4* PBOpos, camera* renderCam, int frame, int iteratio
   cudaMalloc((void**)&cudageoms, numberOfGeoms*sizeof(staticGeom));
   cudaMemcpy( cudageoms, geomList, numberOfGeoms*sizeof(staticGeom), cudaMemcpyHostToDevice);
   
+  //package materials
+  material* cudamtls = NULL;
+  cudaMalloc( (void**)&cudamtls, numberOfMaterials*sizeof(material));
+  cudaMemcpy(cudamtls,materials,numberOfMaterials*sizeof(material),cudaMemcpyHostToDevice);
+
   //package camera
   cameraData cam;
   cam.resolution = renderCam->resolution;
@@ -152,7 +367,7 @@ void cudaRaytraceCore(uchar4* PBOpos, camera* renderCam, int frame, int iteratio
   cam.fov = renderCam->fov;
 
   //kernel launches
-  raytraceRay<<<fullBlocksPerGrid, threadsPerBlock>>>(renderCam->resolution, (float)iterations, cam, traceDepth, cudaimage, cudageoms, numberOfGeoms);
+  raytraceRay<<<fullBlocksPerGrid, threadsPerBlock>>>(renderCam->resolution, (float)iterations, cam, traceDepth, cudaimage, cudageoms, numberOfGeoms,cudamtls,numberOfMaterials);
 
   sendImageToPBO<<<fullBlocksPerGrid, threadsPerBlock>>>(PBOpos, renderCam->resolution, cudaimage);
 

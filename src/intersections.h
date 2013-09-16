@@ -12,6 +12,8 @@
 #include "utilities.h"
 #include <thrust/random.h>
 
+
+
 //Some forward declarations
 __host__ __device__ glm::vec3 getPointOnRay(ray r, float t);
 __host__ __device__ glm::vec3 multiplyMV(cudaMat4 m, glm::vec4 v);
@@ -72,8 +74,57 @@ __host__ __device__ glm::vec3 getSignOfRay(ray r){
 //Cube intersection test, return -1 if no intersection, otherwise, distance to intersection
 __host__ __device__ float boxIntersectionTest(staticGeom box, ray r, glm::vec3& intersectionPoint, glm::vec3& normal){
 
-    return -1;
+	float tNear = -FLT_MAX;
+	float tFar = FLT_MAX;
+	glm::vec3 ro = multiplyMV(box.inverseTransform, glm::vec4(r.origin,1.0f));
+	glm::vec3 rd = glm::normalize(multiplyMV(box.inverseTransform, glm::vec4(r.direction,0.0f)));
+
+	ray rt; 
+	rt.origin = ro; 
+	rt.direction = rd;
+	glm::vec3 invRayDir = getInverseDirectionOfRay(rt);
+
+	float originArray[3] = {ro.x,ro.y,ro.z};
+	float directionArray[3] = {rd.x,rd.y,rd.z};
+	float invRayDirArray[3] = {invRayDir.x,invRayDir.y,invRayDir.z};
+
+	for(unsigned int i=0; i<3; ++i)
+	{
+		if ( directionArray[i] >= (0.0f-EPSILON) && directionArray[i] <= (0.0f+EPSILON))
+		{
+			if (originArray[i]<-0.5f || originArray[i] > 0.5f)
+				return -1;
+		}
+	
+		float oComponent = originArray[i];
+		float t1 = (-0.5f - oComponent) * invRayDirArray[i];
+		float t2 = (0.5f - oComponent) * invRayDirArray[i];
+
+		tNear = max(tNear,fmin(t1,t2));
+		tFar = min( tFar, max(t1,t2));
+		if (tNear>tFar || tFar<0.0f)
+			return -1;
+	}
+
+	float t = tNear>0.0?tNear:tFar;
+	glm::vec3 pointOnRay = getPointOnRay(rt, t);
+	float pointOnRayArray[3] = {pointOnRay.x,pointOnRay.y,pointOnRay.z};
+	glm::vec3 realIntersectionPoint = multiplyMV(box.transform, glm::vec4(pointOnRay, 1.0));
+	glm::vec3 realOrigin = multiplyMV(box.transform, glm::vec4(0,0,0,1));
+    intersectionPoint = realIntersectionPoint;
+	float n[3] = {0,0,0};
+	for (unsigned int i=0; i<3; ++i)
+	{
+		if (fabs(pointOnRayArray[i])>=(0.5f-0.001) && fabs(pointOnRayArray[i])<=(0.5f+0.001) )
+			n[i] = pointOnRayArray[i]<0.0f?-1:1;
+	}	
+    //normal = glm::vec3(n[0],n[1],n[2]);
+	normal = multiplyMV(box.transform, glm::vec4(glm::vec3(n[0],n[1],n[2]), 0.0f));
+        	
+    return glm::length(r.origin - realIntersectionPoint);
+
 }
+
 
 //LOOK: Here's an intersection test example from a sphere. Now you just need to figure out cube and, optionally, triangle.
 //Sphere intersection test, return -1 if no intersection, otherwise, distance to intersection
@@ -177,7 +228,21 @@ __host__ __device__ glm::vec3 getRandomPointOnCube(staticGeom cube, float random
 //Generates a random point on a given sphere
 __host__ __device__ glm::vec3 getRandomPointOnSphere(staticGeom sphere, float randomSeed){
 
-  return glm::vec3(0,0,0);
+	thrust::default_random_engine rng(hash(randomSeed));
+    thrust::uniform_real_distribution<float> u01(0,1);
+    thrust::uniform_real_distribution<float> u02(0,1);
+
+	float radius = 0.5f;
+	float u = (float)u01(rng);
+	float v = (float)u02(rng);
+	
+	float theta = TWO_PI*u;
+	float phi = acosf(2*v-1);
+
+	glm::vec3 point(radius*cosf(theta)*sinf(phi),
+					radius*sinf(theta)*sinf(phi),
+					radius*cosf(phi));
+	return multiplyMV(sphere.transform, glm::vec4(point,1.0f));
 }
 
 #endif

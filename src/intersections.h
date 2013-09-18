@@ -119,7 +119,19 @@ __host__ __device__ float boxIntersectionTest(staticGeom box, ray r, glm::vec3& 
 			n[i] = pointOnRayArray[i]<0.0f?-1:1;
 	}	
     //normal = glm::vec3(n[0],n[1],n[2]);
-	normal = multiplyMV(box.transform, glm::vec4(glm::vec3(n[0],n[1],n[2]), 0.0f));
+	
+	
+	glm::vec4 itX(box.inverseTransform.x.x,box.inverseTransform.y.x,box.inverseTransform.z.x,box.inverseTransform.w.x);
+	glm::vec4 itY(box.inverseTransform.x.y,box.inverseTransform.y.y,box.inverseTransform.z.y,box.inverseTransform.w.y);
+	glm::vec4 itZ(box.inverseTransform.x.z,box.inverseTransform.y.z,box.inverseTransform.z.z,box.inverseTransform.w.z);
+	glm::vec4 itW(box.inverseTransform.x.w,box.inverseTransform.y.w,box.inverseTransform.z.w,box.inverseTransform.w.w);
+	
+	cudaMat4 inverseTranspose;
+	inverseTranspose.x = itX;
+	inverseTranspose.y = itY;
+	inverseTranspose.z = itZ;
+	inverseTranspose.w = itW;
+	normal = multiplyMV(inverseTranspose, glm::vec4(glm::vec3(n[0],n[1],n[2]), 0.0f));
         	
     return glm::length(r.origin - realIntersectionPoint);
 

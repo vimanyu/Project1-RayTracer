@@ -240,19 +240,24 @@ __global__ void raytraceRay(glm::vec2 resolution, float time, cameraData cam, in
 	}
 
 	material mtl = mtls[geoms[nearestIntersectionObject].materialid];
-	glm::vec3 lightPos( 0,10,5);
-	glm::vec3 lightCol(1,1,1);
-	int numberOfLights = 1;
-	float Kd = 0.6;
-	float Ks = 0.2;
+	glm::vec3 lightPos( 0,8,4);
+	glm::vec3 lightCol(0.5,0.5,0.5);
 	glm::vec3 color(0,0,0);
+	int numberOfLights = 1;
+	float Kd = 0.8f;
+	float Ks = 0.2f;
 	
 	for (int i=0;i<numberOfLights;++i)
 	{
 		ray shadowFeeler;
-		shadowFeeler.direction = lightPos - intersectionPoint;
+		glm::vec3 ptToLight = lightPos-intersectionPoint;
+		shadowFeeler.direction = glm::normalize(ptToLight);
 		shadowFeeler.origin = intersectionPoint+ (float)RAY_BIAS_AMOUNT*shadowFeeler.direction;
 		bool occluded = false;
+		
+		float distSquared = ptToLight.x*ptToLight.x + 
+							ptToLight.y*ptToLight.y +
+							ptToLight.z*ptToLight.z;
 		for(int i=0; i<numberOfGeoms;++i)
 		{
 			if(geoms[i].type == SPHERE)
@@ -260,10 +265,19 @@ __global__ void raytraceRay(glm::vec2 resolution, float time, cameraData cam, in
 				glm::vec3 iPoint;
 				glm::vec3 iNormal;		
 				float t = sphereIntersectionTest(geoms[i],shadowFeeler,iPoint,iNormal);
+
 				if (t!= -1)
 				{
-					occluded = true;
-					break;
+					glm::vec3 intersectionPoint = getPointOnRay(shadowFeeler,t);
+					glm::vec3 ptToIntersection = intersectionPoint - shadowFeeler.origin;
+					float dsq = ptToIntersection.x*ptToIntersection.x + 
+					ptToIntersection.y*ptToIntersection.y +
+					ptToIntersection.z*ptToIntersection.z;
+					if (dsq<distSquared)
+					{
+			    		occluded = true;
+						break;
+					}
 				}
 			}
 
@@ -272,29 +286,41 @@ __global__ void raytraceRay(glm::vec2 resolution, float time, cameraData cam, in
 				glm::vec3 iPoint;
 				glm::vec3 iNormal;		
 				float t = boxIntersectionTest(geoms[i],shadowFeeler,iPoint,iNormal);
+
 				if (t!= -1)
 				{
-					occluded = true;
-					break;
+					glm::vec3 intersectionPoint = getPointOnRay(shadowFeeler,t);
+					glm::vec3 ptToIntersection = intersectionPoint - shadowFeeler.origin;
+					float dsq = ptToIntersection.x*ptToIntersection.x + 
+					ptToIntersection.y*ptToIntersection.y +
+					ptToIntersection.z*ptToIntersection.z;
+					if (dsq<distSquared)
+					{
+			    		occluded = true;
+						break;
+					}
 				}
-			}		
+			}
+		
 		}
 
-		//if(occluded)
-		//	continue;
+		if(occluded)
+			continue;
 
 		float LN = glm::dot(shadowFeeler.direction,intersectionNormal);
 		LN = max(LN,0.0f);
 		LN = min(LN,1.0f);
-		//glm::vec3 Rj = glm::normalize(glm::reflect(-shadowFeeler.direction,intersectionNormal));
-		//glm::vec3 V = glm::normalize(cam.position-intersectionPoint);
-		//float RjV = glm::dot(Rj,V);
-		//RjV = max(RjV,0.0f);
-		//RjV = min(RjV,1.0f);
+		glm::vec3 reflect = -shadowFeeler.direction-2.0f*intersectionNormal*
+													glm::dot(-shadowFeeler.direction,intersectionNormal);
+		glm::vec3 Rj = glm::normalize(reflect);
+		glm::vec3 V = glm::normalize(cam.position-intersectionPoint);
+		float RjV = glm::dot(Rj,V);
+		RjV = max(RjV,0.0f);
+		RjV = min(RjV,1.0f);
 
 		//color+= Kd*mtl.color*LN;
-		color+= glm::vec3( fabs(intersectionNormal.x),fabs(intersectionNormal.y),fabs(intersectionNormal.z));
-		//color+= (Kd*mtl.color*LN + Ks*mtl.specularColor*(powf(RjV,mtl.specularExponent)));
+		//color+= glm::vec3( fabs(intersectionNormal.x),fabs(intersectionNormal.y),fabs(intersectionNormal.z));
+		color+= (Kd*mtl.color*LN + Ks*mtl.specularColor*(powf(RjV,mtl.specularExponent)));
 	}
 	
 	colors[index] = color;

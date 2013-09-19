@@ -201,6 +201,8 @@ __global__ void raytraceRay(glm::vec2 resolution, float time, cameraData cam, in
   int index = x + (y * resolution.x);
 
   if((x<=resolution.x && y<=resolution.y)){
+
+	
 	ray r = raycastFromCameraKernel(resolution,time,x,y,cam.position,cam.view,cam.up,cam.fov);
 
 	colors[index] = glm::vec3(1,0,0);
@@ -320,7 +322,10 @@ __global__ void raytraceRay(glm::vec2 resolution, float time, cameraData cam, in
 		RjV = min(RjV,1.0f);
 
 		//color+= Kd*mtl.color*LN;
+		//color += glm::vec3(shadowFeeler.direction);
+		//color+= glm::vec3( intersectionNormal.x,intersectionNormal.y,intersectionNormal.z);
 		//color+= glm::vec3( fabs(intersectionNormal.x),fabs(intersectionNormal.y),fabs(intersectionNormal.z));
+		//color+= glm::vec3(LN,LN,LN);
 		glm::vec3 diffColor = mtl.diffuseCoefficient*lightIntensity*LN*mtl.color;
 		glm::vec3 specColor = mtl.specularCoefficient*mtl.specularColor*(powf(RjV,mtl.specularExponent));
 		color+= (diffColor+specColor);

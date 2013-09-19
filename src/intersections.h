@@ -116,7 +116,7 @@ __host__ __device__ float boxIntersectionTest(staticGeom box, ray r, glm::vec3& 
 	for (unsigned int i=0; i<3; ++i)
 	{
 		if (fabs(pointOnRayArray[i])>=(0.5f-0.001) && fabs(pointOnRayArray[i])<=(0.5f+0.001) )
-			n[i] = pointOnRayArray[i]<0.0f?-1:1;
+			n[i] = pointOnRayArray[i]<0.001f?-1:1;
 	}	
     //normal = glm::vec3(n[0],n[1],n[2]);
 	
@@ -131,10 +131,11 @@ __host__ __device__ float boxIntersectionTest(staticGeom box, ray r, glm::vec3& 
 	inverseTranspose.y = itY;
 	inverseTranspose.z = itZ;
 	inverseTranspose.w = itW;
-	normal = multiplyMV(inverseTranspose, glm::vec4(glm::vec3(n[0],n[1],n[2]), 0.0f));      	
+	normal = glm::normalize(multiplyMV(inverseTranspose, glm::vec4(glm::vec3(n[0],n[1],n[2]), 0.0f)));
     return glm::length(r.origin - realIntersectionPoint);
 
 }
+
 
 
 //LOOK: Here's an intersection test example from a sphere. Now you just need to figure out cube and, optionally, triangle.

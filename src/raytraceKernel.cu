@@ -188,8 +188,6 @@ __host__ __device__ glm::vec3 shade(material& mtl, glm::vec3& shadePoint, glm::v
 	return color;
 }
 
-
-
 //TODO: IMPLEMENT THIS FUNCTION
 //Core raytracer kernel
 __global__ void raytraceRay(glm::vec2 resolution, float time, cameraData cam, int rayDepth, glm::vec3* colors,
@@ -201,12 +199,11 @@ __global__ void raytraceRay(glm::vec2 resolution, float time, cameraData cam, in
   int index = x + (y * resolution.x);
 
   if((x<=resolution.x && y<=resolution.y)){
-
-	
 	ray r = raycastFromCameraKernel(resolution,time,x,y,cam.position,cam.view,cam.up,cam.fov);
-
-	colors[index] = glm::vec3(1,0,0);
-
+	glm::vec3 color(0,0,0);
+	float reflContribution = 1.0f;
+	for(int depth=0; depth<rayDepth; ++depth)
+	{
 	glm::vec3 intersectionPoint;
 	glm::vec3 intersectionNormal;
 	int nearestIntersectionObject = -1;
@@ -244,7 +241,7 @@ __global__ void raytraceRay(glm::vec2 resolution, float time, cameraData cam, in
 
 	material mtl = mtls[geoms[nearestIntersectionObject].materialid];
 
-	glm::vec3 color(0,0,0);
+	
 	
 	for (int i=0;i<numberOfLights;++i)
 	{
@@ -313,9 +310,10 @@ __global__ void raytraceRay(glm::vec2 resolution, float time, cameraData cam, in
 		float LN = glm::dot(shadowFeeler.direction,intersectionNormal);
 		LN = max(LN,0.0f);
 		LN = min(LN,1.0f);
-		glm::vec3 reflect = -shadowFeeler.direction-2.0f*intersectionNormal*
-													glm::dot(-shadowFeeler.direction,intersectionNormal);
-		glm::vec3 Rj = glm::normalize(reflect);
+		//glm::vec3 reflect = -shadowFeeler.direction-2.0f*intersectionNormal*
+		//											glm::dot(-shadowFeeler.direction,intersectionNormal);
+		glm::vec3 reflectedDir =  calculateReflectionDirection(intersectionNormal,-shadowFeeler.direction);
+		glm::vec3 Rj = glm::normalize(reflectedDir);
 		glm::vec3 V = glm::normalize(cam.position-intersectionPoint);
 		float RjV = glm::dot(Rj,V);
 		RjV = max(RjV,0.0f);
@@ -328,8 +326,22 @@ __global__ void raytraceRay(glm::vec2 resolution, float time, cameraData cam, in
 		//color+= glm::vec3(LN,LN,LN);
 		glm::vec3 diffColor = mtl.diffuseCoefficient*lightIntensity*LN*mtl.color;
 		glm::vec3 specColor = mtl.specularCoefficient*mtl.specularColor*(powf(RjV,mtl.specularExponent));
-		color+= (diffColor+specColor);
-	}	
+		glm::vec3 localColor = diffColor+specColor;
+		
+		if(!mtl.hasReflective)
+		{
+			color+= reflContribution*localColor;
+			break;
+		}
+		else
+		{
+		color+= reflContribution*(1.0f-mtl.specularCoefficient)*localColor;
+		reflContribution *= mtl.specularCoefficient;
+		r.direction = reflectedDir;
+		r.origin = intersectionPoint;
+		}
+	}
+	}
 	colors[index] = color;
 
    }

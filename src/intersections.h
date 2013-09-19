@@ -131,8 +131,7 @@ __host__ __device__ float boxIntersectionTest(staticGeom box, ray r, glm::vec3& 
 	inverseTranspose.y = itY;
 	inverseTranspose.z = itZ;
 	inverseTranspose.w = itW;
-	normal = multiplyMV(inverseTranspose, glm::vec4(glm::vec3(n[0],n[1],n[2]), 0.0f));
-        	
+	normal = multiplyMV(inverseTranspose, glm::vec4(glm::vec3(n[0],n[1],n[2]), 0.0f));      	
     return glm::length(r.origin - realIntersectionPoint);
 
 }

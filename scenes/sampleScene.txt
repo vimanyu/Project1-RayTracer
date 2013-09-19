@@ -9,6 +9,8 @@ SCATTER     0
 ABSCOEFF    0 0 0      
 RSCTCOEFF   0
 EMITTANCE   0
+DIFFCOEFF   1
+SPECCOEFF   0
 
 MATERIAL 1 				//red diffuse
 RGB         .63 .06 .04       
@@ -21,6 +23,8 @@ SCATTER     0
 ABSCOEFF    0 0 0      
 RSCTCOEFF   0
 EMITTANCE   0
+DIFFCOEFF   1
+SPECCOEFF   0
 
 MATERIAL 2 				//green diffuse
 RGB         .15 .48 .09      
@@ -33,6 +37,8 @@ SCATTER     0
 ABSCOEFF    0 0 0      
 RSCTCOEFF   0
 EMITTANCE   0
+DIFFCOEFF   1
+SPECCOEFF   0
 
 MATERIAL 3 				//red glossy
 RGB         .63 .06 .04      
@@ -45,6 +51,8 @@ SCATTER     0
 ABSCOEFF    0 0 0      
 RSCTCOEFF   0
 EMITTANCE   0
+DIFFCOEFF   0.4
+SPECCOEFF   0.6
 
 MATERIAL 4 				//white glossy
 RGB         1 1 1     
@@ -57,6 +65,8 @@ SCATTER     0
 ABSCOEFF    0 0 0      
 RSCTCOEFF   0
 EMITTANCE   0
+DIFFCOEFF   0.5
+SPECCOEFF   0.5
 
 MATERIAL 5 				//glass
 RGB         0 0 0    
@@ -69,6 +79,8 @@ SCATTER     0
 ABSCOEFF    .02 5.1 5.7      
 RSCTCOEFF   13
 EMITTANCE   0
+DIFFCOEFF   1
+SPECCOEFF   0
 
 MATERIAL 6 				//green glossy
 RGB         .15 .48 .09      
@@ -81,6 +93,8 @@ SCATTER     0
 ABSCOEFF    0 0 0      
 RSCTCOEFF   0
 EMITTANCE   0
+DIFFCOEFF   0.4
+SPECCOEFF   0.6
 
 MATERIAL 7				//light
 RGB         1 1 1       
@@ -93,6 +107,8 @@ SCATTER     0
 ABSCOEFF    0 0 0      
 RSCTCOEFF   0
 EMITTANCE   1
+DIFFCOEFF   1
+SPECCOEFF   0
 
 MATERIAL 8				//light
 RGB         1 1 1       
@@ -105,11 +121,13 @@ SCATTER     0
 ABSCOEFF    0 0 0      
 RSCTCOEFF   0
 EMITTANCE   15
+DIFFCOEFF   1
+SPECCOEFF   0
 
 CAMERA
 RES         800 800
 FOVY        25
-ITERATIONS  10
+ITERATIONS  1
 FILE        test.bmp
 frame 0
 EYE         0 4.5 12
@@ -166,7 +184,7 @@ SCALE       3 3 3
 
 OBJECT 6
 sphere
-material 3
+material 1
 frame 0
 TRANS       2 5 2
 ROTAT       0 180 0
@@ -188,3 +206,9 @@ frame 0
 TRANS       0 10 0
 ROTAT       0 0 90
 SCALE       .3 3 3
+
+LIGHT 0
+point
+INTENSITY   0.8
+COLOR	    1 1 1 
+POS	    0 8 10

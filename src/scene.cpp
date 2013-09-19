@@ -29,6 +29,10 @@ scene::scene(string filename){
 				    loadCamera();
 				    cout << " " << endl;
 				}
+				else if(strcmp(tokens[0].c_str(), "LIGHT")==0){
+				    loadLight(tokens[1]);
+				    cout << " " << endl;
+				}
 			}
 		}
 	}
@@ -229,7 +233,7 @@ int scene::loadMaterial(string materialid){
 		material newMaterial;
 	
 		//load static properties
-		for(int i=0; i<10; i++){
+		for(int i=0; i<12; i++){
 			string line;
             utilityCore::safeGetline(fp_in,line);
 			vector<string> tokens = utilityCore::tokenizeString(line);
@@ -256,6 +260,10 @@ int scene::loadMaterial(string materialid){
 				newMaterial.reducedScatterCoefficient = atof(tokens[1].c_str());					  
 			}else if(strcmp(tokens[0].c_str(), "EMITTANCE")==0){
 				newMaterial.emittance = atof(tokens[1].c_str());					  
+			}else if(strcmp(tokens[0].c_str(), "DIFFCOEFF")==0){
+				newMaterial.diffuseCoefficient = atof(tokens[1].c_str());					  
+			}else if(strcmp(tokens[0].c_str(), "SPECCOEFF")==0){
+				newMaterial.specularCoefficient = atof(tokens[1].c_str());					  
 			
 			}
 		}
@@ -263,3 +271,46 @@ int scene::loadMaterial(string materialid){
 		return 1;
 	}
 }
+
+
+int scene::loadLight(string lightid){
+    int id = atoi(lightid.c_str());
+    if(id!=lights.size()){
+        cout << "ERROR: LIGHT ID does not match expected number of lights" << endl;
+        return -1;
+    }else{
+        cout << "Loading Light " << id << "..." << endl;
+        light newLight;
+        string line;
+        
+        //load light type 
+        utilityCore::safeGetline(fp_in,line);
+        if (!line.empty() && fp_in.good()){
+            if(strcmp(line.c_str(), "point")==0){
+                cout << "Creating new point light..." << endl;
+				newLight.type = POINT;
+            }
+        }
+       
+		//load static properties
+		for(int i=0; i<3; i++){
+			string line;
+            utilityCore::safeGetline(fp_in,line);
+			vector<string> tokens = utilityCore::tokenizeString(line);
+			if(strcmp(tokens[0].c_str(), "INTENSITY")==0){
+				newLight.intensity = atof(tokens[1].c_str());				  
+			}else if(strcmp(tokens[0].c_str(), "COLOR")==0){
+				glm::vec3 lightColor( atof(tokens[1].c_str()), atof(tokens[2].c_str()), atof(tokens[3].c_str()) );
+				newLight.color = lightColor;
+			}else if(strcmp(tokens[0].c_str(), "POS")==0){
+				glm::vec3 lightPos( atof(tokens[1].c_str()), atof(tokens[2].c_str()), atof(tokens[3].c_str()) );
+				newLight.position = lightPos;
+			}
+			
+		}
+
+        lights.push_back(newLight);
+        return 1;
+    }
+}
+

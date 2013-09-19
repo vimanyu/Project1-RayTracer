@@ -12,6 +12,7 @@
 #include <string>
 
 enum GEOMTYPE{ SPHERE, CUBE, MESH };
+enum LIGHTTYPE{POINT};
 
 struct ray {
 	glm::vec3 origin;
@@ -71,6 +72,15 @@ struct material{
 	glm::vec3 absorptionCoefficient;
 	float reducedScatterCoefficient;
 	float emittance;
+	float diffuseCoefficient;
+	float specularCoefficient;
+};
+
+struct light{
+	float intensity;
+	glm::vec3 color;
+	glm::vec3 position;
+	enum LIGHTTYPE type;
 };
 
 #endif //CUDASTRUCTS_H

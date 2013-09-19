@@ -193,7 +193,8 @@ __host__ __device__ glm::vec3 shade(material& mtl, glm::vec3& shadePoint, glm::v
 //TODO: IMPLEMENT THIS FUNCTION
 //Core raytracer kernel
 __global__ void raytraceRay(glm::vec2 resolution, float time, cameraData cam, int rayDepth, glm::vec3* colors,
-                            staticGeom* geoms, int numberOfGeoms, material* mtls, int numberOfMaterials){
+                            staticGeom* geoms, int numberOfGeoms, material* mtls, int numberOfMaterials,
+							light* lights,int numberOfLights){
 
   int x = (blockIdx.x * blockDim.x) + threadIdx.x;
   int y = (blockIdx.y * blockDim.y) + threadIdx.y;
@@ -240,16 +241,15 @@ __global__ void raytraceRay(glm::vec2 resolution, float time, cameraData cam, in
 	}
 
 	material mtl = mtls[geoms[nearestIntersectionObject].materialid];
-	glm::vec3 lightPos( 0,8,4);
-	glm::vec3 lightCol(0.5,0.5,0.5);
+
 	glm::vec3 color(0,0,0);
-	int numberOfLights = 1;
-	float Kd = 0.8f;
-	float Ks = 0.2f;
 	
 	for (int i=0;i<numberOfLights;++i)
 	{
 		ray shadowFeeler;
+		glm::vec3 lightPos = lights[i].position;
+		glm::vec3 lightCol = lights[i].color;
+		float lightIntensity = lights[i].intensity;
 		glm::vec3 ptToLight = lightPos-intersectionPoint;
 		shadowFeeler.direction = glm::normalize(ptToLight);
 		shadowFeeler.origin = intersectionPoint+ (float)RAY_BIAS_AMOUNT*shadowFeeler.direction;
@@ -258,6 +258,7 @@ __global__ void raytraceRay(glm::vec2 resolution, float time, cameraData cam, in
 		float distSquared = ptToLight.x*ptToLight.x + 
 							ptToLight.y*ptToLight.y +
 							ptToLight.z*ptToLight.z;
+
 		for(int i=0; i<numberOfGeoms;++i)
 		{
 			if(geoms[i].type == SPHERE)
@@ -320,34 +321,21 @@ __global__ void raytraceRay(glm::vec2 resolution, float time, cameraData cam, in
 
 		//color+= Kd*mtl.color*LN;
 		//color+= glm::vec3( fabs(intersectionNormal.x),fabs(intersectionNormal.y),fabs(intersectionNormal.z));
-		color+= (Kd*mtl.color*LN + Ks*mtl.specularColor*(powf(RjV,mtl.specularExponent)));
-	}
-	
+		glm::vec3 diffColor = mtl.diffuseCoefficient*lightIntensity*LN*mtl.color;
+		glm::vec3 specColor = mtl.specularCoefficient*mtl.specularColor*(powf(RjV,mtl.specularExponent));
+		color+= (diffColor+specColor);
+	}	
 	colors[index] = color;
 
-
-	//glm::vec3 shadePoint;
-	//glm::vec3 shadeNormal;
-
-	//int intersectionGeomIndex = findNearestGeometricIntersection(r,shadePoint,shadeNormal,geoms,numberOfGeoms);
-	//
-	//if (intersectionGeomIndex == -1)
-	//{
-	//	colors[index] = glm::vec3(0,0,0);
-	//	return;
-	//}
-
-	//colors[index] = shade(mtls[geoms[intersectionGeomIndex].materialid], shadePoint, shadeNormal,cam.position,geoms,numberOfGeoms);
-
-    //colors[index] = generateRandomNumberFromThread(resolution, time, x, y);
    }
 }
 
 
 
+
 //TODO: FINISH THIS FUNCTION
 // Wrapper for the __global__ call that sets up the kernel calls and does a ton of memory management
-void cudaRaytraceCore(uchar4* PBOpos, camera* renderCam, int frame, int iterations, material* materials, int numberOfMaterials, geom* geoms, int numberOfGeoms){
+void cudaRaytraceCore(uchar4* PBOpos, camera* renderCam, int frame, int iterations, material* materials, int numberOfMaterials, geom* geoms, int numberOfGeoms,light* lights, int numberOfLights){
   
   int traceDepth = 1; //determines how many bounces the raytracer traces
 
@@ -384,6 +372,11 @@ void cudaRaytraceCore(uchar4* PBOpos, camera* renderCam, int frame, int iteratio
   cudaMalloc( (void**)&cudamtls, numberOfMaterials*sizeof(material));
   cudaMemcpy(cudamtls,materials,numberOfMaterials*sizeof(material),cudaMemcpyHostToDevice);
 
+  //package lights
+  light* cudalights = NULL;
+  cudaMalloc( (void**)&cudalights, numberOfLights*sizeof(light));
+  cudaMemcpy(cudalights,lights,numberOfLights*sizeof(light),cudaMemcpyHostToDevice);
+
   //package camera
   cameraData cam;
   cam.resolution = renderCam->resolution;
@@ -393,7 +386,7 @@ void cudaRaytraceCore(uchar4* PBOpos, camera* renderCam, int frame, int iteratio
   cam.fov = renderCam->fov;
 
   //kernel launches
-  raytraceRay<<<fullBlocksPerGrid, threadsPerBlock>>>(renderCam->resolution, (float)iterations, cam, traceDepth, cudaimage, cudageoms, numberOfGeoms,cudamtls,numberOfMaterials);
+  raytraceRay<<<fullBlocksPerGrid, threadsPerBlock>>>(renderCam->resolution, (float)iterations, cam, traceDepth, cudaimage, cudageoms, numberOfGeoms,cudamtls,numberOfMaterials,cudalights,numberOfLights);
 
   sendImageToPBO<<<fullBlocksPerGrid, threadsPerBlock>>>(PBOpos, renderCam->resolution, cudaimage);
 
@@ -403,6 +396,8 @@ void cudaRaytraceCore(uchar4* PBOpos, camera* renderCam, int frame, int iteratio
   //free up stuff, or else we'll leak memory like a madman
   cudaFree( cudaimage );
   cudaFree( cudageoms );
+  cudaFree(cudamtls);
+  cudaFree(cudalights);
   delete geomList;
 
   // make certain the kernel has completed

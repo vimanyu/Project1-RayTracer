@@ -1,0 +1,4 @@
+tileSize   | TIME(ms)
+8X8 		1076
+4X4		1154
+2X2		2949

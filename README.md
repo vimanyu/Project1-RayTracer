@@ -104,4 +104,6 @@ routines
 * Phong shading
 ![alt tag](https://raw.github.com/vimanyu/Project1-RayTracer/master/renders/phong_shading.bmp)
 
+* Phong shading
+![alt tag](https://raw.github.com/vimanyu/Project1-RayTracer/master/renders/supersampled_and_reflections.bmp)
 
